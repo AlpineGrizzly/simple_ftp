@@ -15,7 +15,7 @@
 #define CLIENT_DONE "END_OF_TRANSMISSION"
 
 // FTP defines 
-#define FTP_PORT 2002
+#define FTP_PORT 2003
 #define IP "127.0.0.1"
 
 // Function for serving client that is connected
@@ -57,6 +57,8 @@ void serve_client(int client_sd) {
             break;
         }
         fwrite(client_buf, strlen(client_buf), 1, outfp);
+        memset(client_buf, '\0', BUFSIZE); // Clean buffer
+
     }
     fclose(outfp);
 

@@ -13,7 +13,7 @@
 #define BUFSIZE 1024
 
 // FTP defines 
-#define FTP_PORT 2002 // Data port for ftp
+#define FTP_PORT 2003 // Data port for ftp
 #define CLIENT_DONE "END_OF_TRANSMISSION"
 
 // Arg defines
@@ -101,7 +101,6 @@ int main(int argc, char *argv[]) {
     }
     printf("Server message: %s\n", buf);
         
-    memset(buf, '\0', BUFSIZE); // Clean buffer
     if (strcmp(buf, "go") != 0) { 
         printf("Didn't receive init from server, exiting...\n");
         close(sd);
@@ -116,6 +115,7 @@ int main(int argc, char *argv[]) {
         printf("Buf: %s\n", (char*)buf);
         send(sd, buf, strlen(buf), 0);
         // repeat until EOF
+        memset(buf, '\0', BUFSIZE); // Clean buffer
     }
     fclose(fp);
     printf("Done sending file\n");
