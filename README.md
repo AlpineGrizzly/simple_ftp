@@ -10,3 +10,7 @@ Simple File transfer protocol client and server pair
 ## Usage
 ./client IP_ADDRESS FILE_2_SEND 
 ./server
+
+## TODO 
+- [ ] Still an issue with the go having extra characters
+- [ ] Need to get bigfile to send and verify correctly
