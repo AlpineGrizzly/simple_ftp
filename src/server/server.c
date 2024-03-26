@@ -144,6 +144,7 @@ int main(int argc, char *argv[]) {
     server.sin6_family = AF_INET6;
     server.sin6_addr = in6addr_any;
     server.sin6_port = htons(FTP_PORT);
+    server.sin6_scope_id = if_nametoindex("enp7s0");
 #else
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = inet_addr(IP);
