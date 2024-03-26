@@ -36,6 +36,7 @@ void usage() {
 
 int main(int argc, char *argv[]) { 
     int sd; // Socket decriptor for connection to server
+    int mlen; // Message length
     struct sockaddr_in server, client;
     char *ip; // Server IP address
     char *fn; // Filename to send to server
@@ -86,19 +87,20 @@ int main(int argc, char *argv[]) {
     printf("Successfully sent request to server %s:%d\n", ip, FTP_PORT);
     
     // wait for confirmation and send filename to server
-    if (recv(sd, buf, sizeof(buf), 0) < 0) { 
+    if (mlen = recv(sd, buf, sizeof(buf), 0) < 0) { 
         printf("Unable to receive message from server\n");
         exit(0);
     }
-    printf("Server message [%d]: %s\n", strlen(buf), buf);
+    printf("Server message [%d == %d]: %s\n", strlen(buf), mlen, buf);
     
     if (strcmp(buf, "go") != 0) { 
-        printf("Rejected by server!");
+        printf("Rejected by server!\n");
         close(sd);
         exit(0);
     }
     memset(buf, 0, BUFSIZE); // Clean buffer
 
+    int total_read = 0;
     // Begin sending file data
     while(size_read = fread(&buf, 1, BUFSIZE, fp) > 0) {    
         // Read X bytes of data from file 
@@ -106,10 +108,11 @@ int main(int argc, char *argv[]) {
         printf("Sent [%d]%s\n", strlen(buf), (char*)buf);
         send(sd, buf, strlen(buf), 0);
         // repeat until EOF
+        total_read += size_read;
         memset(buf, '\0', BUFSIZE); // Clean buffer
     }
     fclose(fp);
-    printf("Done sending file\n");
+    printf("Done sending file: %d bytes sent\n", total_read);
     send(sd, CLIENT_DONE, strlen(CLIENT_DONE), 0); // Indicate to server we are done
 
     memset(buf, 0, BUFSIZE); // Clean buffer

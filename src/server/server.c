@@ -27,8 +27,8 @@ void serve_client(int client_sd) {
     char outfile[BUFSIZE]; // Filename to write out to
     unsigned char client_buf[BUFSIZE+1]; // +1 for null terminator
     unsigned char server_buf[BUFSIZE+1]; 
-    memset(server_buf, '\0', BUFSIZE + 1);
-    memset(client_buf, '\0', BUFSIZE + 1);
+    memset(server_buf, 0, BUFSIZE + 1);
+    memset(client_buf, 0, BUFSIZE + 1);
 
     printf("Serving %d\n", client_sd);
 
@@ -42,6 +42,7 @@ void serve_client(int client_sd) {
 
     // Initiate transfer from client
     /// Ask for accept or reject and send go or die 
+    printf("before %d\n", server_buf);
     char query;
     while(1) { 
         printf("Accept or reject %s? (y/n): ", outfile);
@@ -62,7 +63,7 @@ void serve_client(int client_sd) {
 
     // Init out file to write data to 
     FILE *outfp = fopen(outfile, "w");
-
+    printf("after %d\n", server_buf);
     // Otherwise accept, and listen for message
     strcpy(server_buf, GO);
     if (send(client_sd, server_buf, strlen(GO), 0) < 0) { 
@@ -76,6 +77,7 @@ void serve_client(int client_sd) {
     memset(client_buf, '\0', BUFSIZE); // Clean buffer
     while ((mlen = read(client_sd, client_buf, BUFSIZE)) > 0) {
         client_buf[mlen] = '\0';
+        printf("[%d]%s\n", mlen, client_buf);
 
         trm_pos = strstr(client_buf, CLIENT_DONE);
         if (trm_pos != NULL) { 
