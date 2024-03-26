@@ -17,9 +17,17 @@
 #define REJECT "reject"
 #define CLIENT_DONE "END_OF_TRANSMISSION"
 
+// Net defines
+#define IPV6 1 
+#define QUEUELEN 5
+
 // FTP defines 
 #define FTP_PORT 2003
+#ifdef IPV6 
+#define IP "::1"
+#else
 #define IP "127.0.0.1"
+#endif
 
 // Function for serving client that is connected
 void serve_client(int client_sd) { 
@@ -108,34 +116,50 @@ void serve_client(int client_sd) {
 
 int main(int argc, char *argv[]) { 
     int sd, client_sd; // server and client fd 
+#ifdef IPV6 
+    char addr6_str[INET6_ADDRSTRLEN];
+    struct sockaddr_in6 server, client;
+#else
     struct sockaddr_in server, client; 
+#endif
 
     // Initialize and establish sd for server
-    sd = socket(AF_INET, SOCK_STREAM, 0);
+#ifdef IPV6 
+    sd = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
+#else
+    sd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+#endif
     if (sd == -1) { 
         printf("Socket creation failed!\n");
         exit(0);
     }
-    printf("socket %d\n", sd);
+    printf("Connected to socket %d\n", sd);
 
     // Set socket options
     int enable = 1;
-    setsockopt(sd, SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(enable));
+    setsockopt(sd, SOL_SOCKET, SO_REUSEPORT | SO_REUSEADDR, &enable, sizeof(enable));
 
     // Ip and port assignments for server
+#ifdef IPV6 
+    server.sin6_family = AF_INET6;
+    server.sin6_addr = in6addr_any;
+    server.sin6_port = htons(FTP_PORT);
+#else
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = inet_addr(IP);
     server.sin_port = htons(FTP_PORT);
+#endif
 
     // Bind port 
     if ((bind(sd, (struct sockaddr*)&server, sizeof(server)) != 0)) { 
         printf("Socket bind failed!\n");
+        close(sd);
         exit(0);
     }
     printf("Binded to %s:%d\n", IP, FTP_PORT);
 
     // Listen for connections from clients
-    if (listen(sd, 5) != 0) { 
+    if (listen(sd, QUEUELEN) != 0) { 
         printf("Unable to listen\n");
         exit(0);
     }
@@ -152,8 +176,12 @@ int main(int argc, char *argv[]) {
             printf("Failed client request:: %d\n", client_sd);
             continue;
         }
+    #ifdef IPV6 
+        inet_ntop(AF_INET6, &(client.sin6_addr), addr6_str, sizeof(addr6_str));
+        printf("Serving %s:%i\n", addr6_str, ntohs(client.sin6_port));
+    #else 
         printf("Serving %s:%i\n", inet_ntoa(client.sin_addr), ntohs(client.sin_port));
-
+    #endif
         // Server client 
         serve_client(client_sd);
         close(client_sd); // close connection with served client 

@@ -12,6 +12,8 @@
 // Buffer for sending chunk data to server
 #define BUFSIZE 1024
 
+#define IPV6 1 // Indicates we are using ipv6 
+
 // FTP defines 
 #define FTP_PORT 2003 // Data port for ftp
 #define CLIENT_DONE "END_OF_TRANSMISSION"
@@ -37,7 +39,11 @@ void usage() {
 int main(int argc, char *argv[]) { 
     int sd; // Socket decriptor for connection to server
     int mlen; // Message length
+#ifdef IPV6
+    struct sockaddr_in6 server, client;
+#else 
     struct sockaddr_in server, client;
+#endif
     char *ip; // Server IP address
     char *fn; // Filename to send to server
     unsigned char buf[BUFSIZE]; // Read buffer for file to send to server
@@ -57,17 +63,27 @@ int main(int argc, char *argv[]) {
 
     // Initiate tcp connection to server
     /// Init socket 
-    sd = socket(AF_INET, SOCK_STREAM, 0);
+#ifdef IPV6 
+    sd = socket(AF_INET6, SOCK_STREAM, IPPROTO_TCP);
+#else 
+    sd = socket(AF_INET, SOCK_STREAM, IPPROTO_TCP);
+#endif
     if (sd == -1) { 
         printf("Failed to init socket!\n");
         exit(0);
     }
 
     // IP port assignments for server
+#ifdef IPV6 
+    server.sin6_family = AF_INET6;
+    server.sin6_port = htons(FTP_PORT);
+    inet_pton(AF_INET6, ip, &server.sin6_addr);
+    server.sin6_scope_id = if_nametoindex("enp7s0");
+#else 
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = inet_addr(ip);
     server.sin_port = htons(FTP_PORT);
-
+#endif
     // Connect cient to server socket
     if (connect(sd, (struct sockaddr*)&server, sizeof(server)) != 0) { 
         printf("Failed to connect to server!\n");
@@ -91,7 +107,7 @@ int main(int argc, char *argv[]) {
         printf("Unable to receive message from server\n");
         exit(0);
     }
-    printf("Server message [%d == %d]: %s\n", strlen(buf), mlen, buf);
+    printf("Server message: %s\n", buf);
     
     if (strcmp(buf, "go") != 0) { 
         printf("Rejected by server!\n");
