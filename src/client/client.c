@@ -78,15 +78,6 @@ int main(int argc, char *argv[]) {
     int success = 0; // Indicates whether file transfer was successful
     size_t size_read;
 
-
-    // Send message to server
-    //send(sd, fn, strlen(fn), 0);
-    //printf("Successfully sent request to server %s:%d\n", ip, FTP_PORT);
-//
-    //// Read server response
-    //int valread = read(sd, buf, BUFSIZE);
-    //printf("Server: %s\n", buf);
-
     // Send request to server 
     if (send(sd, fn, strlen(fn), 0) < 0) { 
         printf("Unable to send request to server\n");
@@ -99,20 +90,20 @@ int main(int argc, char *argv[]) {
         printf("Unable to receive message from server\n");
         exit(0);
     }
-    printf("Server message: %s\n", buf);
-        
+    printf("Server message [%d]: %s\n", strlen(buf), buf);
+    
     if (strcmp(buf, "go") != 0) { 
-        printf("Didn't receive init from server, exiting...\n");
+        printf("Rejected by server!");
         close(sd);
         exit(0);
     }
+    memset(buf, 0, BUFSIZE); // Clean buffer
 
-    memset(buf, '\0', BUFSIZE); // Clean buffer
     // Begin sending file data
     while(size_read = fread(&buf, 1, BUFSIZE, fp) > 0) {    
         // Read X bytes of data from file 
         // Send X bytes of data read to server
-        printf("Buf: %s\n", (char*)buf);
+        printf("Sent [%d]%s\n", strlen(buf), (char*)buf);
         send(sd, buf, strlen(buf), 0);
         // repeat until EOF
         memset(buf, '\0', BUFSIZE); // Clean buffer
@@ -121,7 +112,9 @@ int main(int argc, char *argv[]) {
     printf("Done sending file\n");
     send(sd, CLIENT_DONE, strlen(CLIENT_DONE), 0); // Indicate to server we are done
 
-    memset(buf, '\0', BUFSIZE); // Clean buffer
+    memset(buf, 0, BUFSIZE); // Clean buffer
+
+    printf("Waiting on response from server...\n");
     // Get status from server
     if (recv(sd, buf, sizeof(buf), 0) < 0) { 
         printf("Unable to receive message from server\n");

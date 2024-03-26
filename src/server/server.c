@@ -12,6 +12,9 @@
 // Buffer for sending chunk data to server
 #define BUFSIZE 1024
 
+// Command Messages
+#define GO "go"
+#define REJECT "reject"
 #define CLIENT_DONE "END_OF_TRANSMISSION"
 
 // FTP defines 
@@ -22,10 +25,10 @@
 void serve_client(int client_sd) { 
     int mlen;
     char outfile[BUFSIZE]; // Filename to write out to
-    unsigned char client_buf[BUFSIZE]; 
-    unsigned char server_buf[BUFSIZE]; 
-    memset(server_buf, '\0', BUFSIZE);
-    memset(client_buf, '\0', BUFSIZE);
+    unsigned char client_buf[BUFSIZE+1]; // +1 for null terminator
+    unsigned char server_buf[BUFSIZE+1]; 
+    memset(server_buf, '\0', BUFSIZE + 1);
+    memset(client_buf, '\0', BUFSIZE + 1);
 
     printf("Serving %d\n", client_sd);
 
@@ -38,27 +41,53 @@ void serve_client(int client_sd) {
     strcpy(outfile, client_buf);
 
     // Initiate transfer from client
-    strcpy(server_buf, "go");
-    if (send(client_sd, server_buf, strlen(server_buf), 0) < 0) { 
-        printf("Unable to send init to client\n");
-        return;
+    /// Ask for accept or reject and send go or die 
+    char query;
+    while(1) { 
+        printf("Accept or reject %s? (y/n): ", outfile);
+        query = getchar();
+        if (query == 'n') {
+            // Do not accept
+            strcpy(server_buf, REJECT);
+            if (send(client_sd, server_buf, strlen(REJECT), 0) < 0) { 
+                printf("Unable to send reject to client\n");
+                return;
+            }
+            printf("Rejected client file!\n");
+            return;
+        } else if (query == 'y') { 
+            break; // Go do stuff
+        }
     }
 
     // Init out file to write data to 
     FILE *outfp = fopen(outfile, "w");
 
+    // Otherwise accept, and listen for message
+    strcpy(server_buf, GO);
+    if (send(client_sd, server_buf, strlen(GO), 0) < 0) { 
+        printf("Unable to send init to client\n");
+        return;
+    }
+
+    char *trm_pos; // Will hold terminating string
     // Begin listening for chunks
     printf("Begin listening for data\n");
+    memset(client_buf, '\0', BUFSIZE); // Clean buffer
     while ((mlen = read(client_sd, client_buf, BUFSIZE)) > 0) {
-        printf("%d\n", mlen); 
-        printf("%s\n", client_buf);
-        if (!strcmp(client_buf, CLIENT_DONE)) { 
-            // we are done
+        client_buf[mlen] = '\0';
+
+        trm_pos = strstr(client_buf, CLIENT_DONE);
+        if (trm_pos != NULL) { 
+            *trm_pos = '\0';
+            printf("Received EOT\n"); // We are done
+            printf("[%d]%s\n", strlen(client_buf), client_buf);
+            fwrite(client_buf, strlen(client_buf), 1, outfp);
+            memset(client_buf, '\0', BUFSIZE); // Clean buffer
             break;
         }
         fwrite(client_buf, strlen(client_buf), 1, outfp);
         memset(client_buf, '\0', BUFSIZE); // Clean buffer
-
     }
     fclose(outfp);
 
@@ -87,6 +116,10 @@ int main(int argc, char *argv[]) {
     }
     printf("socket %d\n", sd);
 
+    // Set socket options
+    int enable = 1;
+    setsockopt(sd, SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(enable));
+
     // Ip and port assignments for server
     server.sin_family = AF_INET;
     server.sin_addr.s_addr = inet_addr(IP);
@@ -104,10 +137,11 @@ int main(int argc, char *argv[]) {
         printf("Unable to listen\n");
         exit(0);
     }
-    printf("Listening for clients...\n");
     int client_len = sizeof(client);
 
     while(1) { // Main listen and server loop
+        printf("Listening for clients...\n");
+
         // Receive client request for file transfer
         client_sd = accept(sd, (struct sockaddr*)&client, (socklen_t *)&client_len);
 
