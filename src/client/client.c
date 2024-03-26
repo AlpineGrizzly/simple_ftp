@@ -16,7 +16,7 @@
 #define IPV6 1 // Indicates we are using ipv6 
 
 // FTP defines 
-#define FTP_PORT 2003 // Data port for ftp
+#define FTP_PORT 2000 // Data port for ftp
 
 // Command Messages
 #define GO "go"
@@ -43,7 +43,9 @@ void usage() {
 
 int main(int argc, char *argv[]) { 
     int sd; // Socket decriptor for connection to server
-    int mlen; // Message length
+    size_t size_read;
+    ssize_t mlen; // Message length
+    uint64_t total_read = 0; // Total bytes read from file
 #ifdef IPV6
     struct sockaddr_in6 server, client;
 #else 
@@ -60,7 +62,7 @@ int main(int argc, char *argv[]) {
     fn = argv[Fn];
 
     // Check to make sure file exists
-    FILE *fp = fopen(fn, "r");
+    FILE *fp = fopen(fn, "rb");
     if (fp == NULL) { 
         printf("FIle %s does not exist!\n", fn);
         exit(0);
@@ -98,7 +100,6 @@ int main(int argc, char *argv[]) {
 
     /// Main loop to send file to server 
     int success = 0; // Indicates whether file transfer was successful
-    size_t size_read;
 
     // Send request to server 
     if (send(sd, fn, strlen(fn), 0) < 0) { 
@@ -123,19 +124,19 @@ int main(int argc, char *argv[]) {
     }
     memset(buf, 0, BUFSIZE); // Clean buffer
 
-    uint64_t total_read = 0; // Total bytes read from file
     // Begin sending file data
-    while(size_read = fread(&buf, 1, BUFSIZE, fp) > 0) {    
-        // Read X bytes of data from file 
-        // Send X bytes of data read to server
-        printf("Sent [%d]%s\n", (int)size_read, (char*)buf);
-        total_read += send(sd, buf, strlen(buf), 0);
-        // repeat until EOF
-        memset(buf, '\0', BUFSIZE); // Clean buffer
+    while((size_read = fread(&buf, 1, BUFSIZE, fp)) > 0) {    
+        //printf("Sent [%d]%s\n", (int)size_read, (char*)buf);
+        if (send(sd, buf, size_read, 0) != size_read) { 
+            printf("Error reading file!\n");
+            break;
+        }
+        total_read += size_read;
+        //memset(buf, '\0', BUFSIZE); // Clean buffer
     }
     fclose(fp);
     printf("Done sending file: %d bytes sent\n", total_read);
-    send(sd, CLIENT_DONE, strlen(CLIENT_DONE), 0); // Indicate to server we are done
+    //send(sd, CLIENT_DONE, strlen(CLIENT_DONE), 0); // Indicate to server we are done
 
     memset(buf, 0, BUFSIZE); // Clean buffer
 

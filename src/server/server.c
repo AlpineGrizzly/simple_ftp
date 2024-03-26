@@ -24,7 +24,7 @@
 #define QUEUELEN 5
 
 // FTP defines 
-#define FTP_PORT 2003
+#define FTP_PORT 2000
 #ifdef IPV6 
 #define IP "::1"
 #else
@@ -33,12 +33,11 @@
 
 // Function for serving client that is connected
 void serve_client(int client_sd) { 
-    int mlen;
+    size_t mlen;
+    uint64_t total_read = 0; // bytes read
     char outfile[BUFSIZE]; // Filename to write out to
-    unsigned char client_buf[BUFSIZE+1]; // +1 for null terminator
-    unsigned char server_buf[BUFSIZE+1]; 
-    memset(server_buf, 0, BUFSIZE + 1);
-    memset(client_buf, 0, BUFSIZE + 1);
+    unsigned char client_buf[BUFSIZE] = {0}; // +1 for null terminator
+    unsigned char server_buf[BUFSIZE] = {0}; 
 
     printf("Serving %d\n", client_sd);
 
@@ -71,7 +70,7 @@ void serve_client(int client_sd) {
     }
 
     // Init out file to write data to 
-    FILE *outfp = fopen(outfile, "w");
+    FILE *outfp = fopen(outfile, "wb");
 
     // Otherwise accept, and listen for message
     printf("strlen %d\n", strlen(GO));
@@ -80,26 +79,15 @@ void serve_client(int client_sd) {
         return;
     }
 
-    char *trm_pos; // Will hold terminating string
-    uint64_t total_read = 0; // bytes read
-    // Begin listening for chunks
     printf("Begin listening for data\n");
     while ((mlen = read(client_sd, client_buf, BUFSIZE)) > 0) {
-        client_buf[mlen] = '\0';
-        printf("[%d]%s\n", mlen, client_buf);
-        trm_pos = strstr(client_buf, CLIENT_DONE);
-        if (trm_pos != NULL) { 
-            *trm_pos = '\0';
-            printf("Received EOT\n"); // We are done
-            printf("[%d]%s\n", strlen(client_buf), client_buf);
-            fwrite(client_buf, strlen(client_buf), 1, outfp);
-            total_read += strlen(client_buf);
-            memset(client_buf, '\0', BUFSIZE); // Clean buffer
+        if (fwrite(client_buf, 1, mlen, outfp) != mlen) { 
+            printf("Error writing file!\n");
             break;
         }
-        fwrite(client_buf, strlen(client_buf), 1, outfp);
         total_read += mlen;
-        memset(client_buf, '\0', BUFSIZE); // Clean buffer
+
+        if (mlen < BUFSIZE) { break; }
     }
     fclose(outfp);
 
@@ -108,8 +96,6 @@ void serve_client(int client_sd) {
 
     // Send success to client 
     printf("Sending success to client\n");
-    memset(server_buf, '\0', BUFSIZE);
-    //strcpy(server_buf, "success");
     if (send(client_sd, SUCCESS, strlen(SUCCESS), 0) < 0) { 
         printf("Unable to send successs to client\n");
         return;
@@ -139,7 +125,7 @@ int main(int argc, char *argv[]) {
 
     // Set socket options
     int enable = 1;
-    setsockopt(sd, SOL_SOCKET, SO_REUSEPORT | SO_REUSEADDR, &enable, sizeof(enable));
+    setsockopt(sd, SOL_SOCKET, SO_REUSEPORT, &enable, sizeof(enable));
 
     // Ip and port assignments for server
 #ifdef IPV6 
