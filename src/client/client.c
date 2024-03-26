@@ -1,6 +1,7 @@
 #include <stdio.h> 
 #include <stdlib.h> 
 #include <string.h>
+#include <stdint.h>
 
 // Socket libraries
 #include <unistd.h>
@@ -16,7 +17,11 @@
 
 // FTP defines 
 #define FTP_PORT 2003 // Data port for ftp
+
+// Command Messages
+#define GO "go"
 #define CLIENT_DONE "END_OF_TRANSMISSION"
+#define SUCCESS "success"
 
 // Arg defines
 #define NUM_ARGS 3
@@ -103,28 +108,29 @@ int main(int argc, char *argv[]) {
     printf("Successfully sent request to server %s:%d\n", ip, FTP_PORT);
     
     // wait for confirmation and send filename to server
-    if (mlen = recv(sd, buf, sizeof(buf), 0) < 0) { 
+    mlen = recv(sd, buf, sizeof(buf), 0);
+    if (mlen < 0) { 
         printf("Unable to receive message from server\n");
         exit(0);
     }
-    printf("Server message: %s\n", buf);
+    buf[mlen] = '\0'; // Null terminate
+    printf("Server message: [%d]%s\n", mlen, buf);
     
-    if (strcmp(buf, "go") != 0) { 
+    if (strcmp(buf, GO) != 0) { 
         printf("Rejected by server!\n");
         close(sd);
         exit(0);
     }
     memset(buf, 0, BUFSIZE); // Clean buffer
 
-    int total_read = 0;
+    uint64_t total_read = 0; // Total bytes read from file
     // Begin sending file data
     while(size_read = fread(&buf, 1, BUFSIZE, fp) > 0) {    
         // Read X bytes of data from file 
         // Send X bytes of data read to server
-        printf("Sent [%d]%s\n", strlen(buf), (char*)buf);
-        send(sd, buf, strlen(buf), 0);
+        printf("Sent [%d]%s\n", (int)size_read, (char*)buf);
+        total_read += send(sd, buf, strlen(buf), 0);
         // repeat until EOF
-        total_read += size_read;
         memset(buf, '\0', BUFSIZE); // Clean buffer
     }
     fclose(fp);
@@ -135,13 +141,16 @@ int main(int argc, char *argv[]) {
 
     printf("Waiting on response from server...\n");
     // Get status from server
-    if (recv(sd, buf, sizeof(buf), 0) < 0) { 
+    mlen = recv(sd, buf, sizeof(buf), 0);
+    if (mlen < 0) { 
         printf("Unable to receive message from server\n");
         exit(0);
     }
+    buf[mlen] = '\0';
     printf("Server message: %s\n", buf);
+
     // Inform the user whether the file transfer was successful and close the connection
-    if (strcmp(buf, "success") != 0) { 
+    if (strcmp(buf, SUCCESS) != 0) { 
         // failed!
         printf("File transfer failed!\n");
     } else { 

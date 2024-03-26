@@ -1,6 +1,7 @@
 #include <stdio.h> 
 #include <stdlib.h> 
 #include <string.h>
+#include <stdint.h>
 
 // Socket libraries
 #include <unistd.h>
@@ -16,6 +17,7 @@
 #define GO "go"
 #define REJECT "reject"
 #define CLIENT_DONE "END_OF_TRANSMISSION"
+#define SUCCESS "success"
 
 // Net defines
 #define IPV6 1 
@@ -47,18 +49,17 @@ void serve_client(int client_sd) {
     }
     printf("Outfile %s\n", client_buf);
     strcpy(outfile, client_buf);
+    memset(client_buf, '\0', BUFSIZE); // Clean buffer
 
     // Initiate transfer from client
     /// Ask for accept or reject and send go or die 
-    printf("before %d\n", server_buf);
     char query;
+    printf("Accept or reject %s? (y/n): ", outfile);
     while(1) { 
-        printf("Accept or reject %s? (y/n): ", outfile);
-        query = getchar();
+        scanf("%c", &query);
         if (query == 'n') {
             // Do not accept
-            strcpy(server_buf, REJECT);
-            if (send(client_sd, server_buf, strlen(REJECT), 0) < 0) { 
+            if (send(client_sd, REJECT, strlen(REJECT), 0) < 0) { 
                 printf("Unable to send reject to client\n");
                 return;
             }
@@ -71,44 +72,45 @@ void serve_client(int client_sd) {
 
     // Init out file to write data to 
     FILE *outfp = fopen(outfile, "w");
-    printf("after %d\n", server_buf);
+
     // Otherwise accept, and listen for message
-    strcpy(server_buf, GO);
-    if (send(client_sd, server_buf, strlen(GO), 0) < 0) { 
+    printf("strlen %d\n", strlen(GO));
+    if (send(client_sd, GO, strlen(GO), 0) < 0) { 
         printf("Unable to send init to client\n");
         return;
     }
 
     char *trm_pos; // Will hold terminating string
+    uint64_t total_read = 0; // bytes read
     // Begin listening for chunks
     printf("Begin listening for data\n");
-    memset(client_buf, '\0', BUFSIZE); // Clean buffer
     while ((mlen = read(client_sd, client_buf, BUFSIZE)) > 0) {
         client_buf[mlen] = '\0';
         printf("[%d]%s\n", mlen, client_buf);
-
         trm_pos = strstr(client_buf, CLIENT_DONE);
         if (trm_pos != NULL) { 
             *trm_pos = '\0';
             printf("Received EOT\n"); // We are done
             printf("[%d]%s\n", strlen(client_buf), client_buf);
             fwrite(client_buf, strlen(client_buf), 1, outfp);
+            total_read += strlen(client_buf);
             memset(client_buf, '\0', BUFSIZE); // Clean buffer
             break;
         }
         fwrite(client_buf, strlen(client_buf), 1, outfp);
+        total_read += mlen;
         memset(client_buf, '\0', BUFSIZE); // Clean buffer
     }
     fclose(outfp);
 
     // Confirm receiving the file from the client
-    printf("Successfully received filename and message from client\n");
+    printf("Successfully received %d bytes from %s\n", total_read, outfile);
 
     // Send success to client 
     printf("Sending success to client\n");
     memset(server_buf, '\0', BUFSIZE);
-    strcpy(server_buf, "success");
-    if (send(client_sd, server_buf, strlen(server_buf), 0) < 0) { 
+    //strcpy(server_buf, "success");
+    if (send(client_sd, SUCCESS, strlen(SUCCESS), 0) < 0) { 
         printf("Unable to send successs to client\n");
         return;
     }
