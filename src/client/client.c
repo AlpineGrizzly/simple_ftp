@@ -22,6 +22,11 @@
 #define GO "go"
 #define CLIENT_DONE "END_OF_TRANSMISSION"
 #define SUCCESS "success"
+#define ACK "ack"
+#define RETRY "retry"
+
+#define WIPE(x) (memset(x, '\0', sizeof(x)))
+
 
 // Arg defines
 #define NUM_ARGS 3
@@ -41,11 +46,23 @@ void usage() {
     exit(0);
 }
 
+uint64_t get_filelen(FILE *fp) { 
+    uint64_t flen;
+    
+    fseek(fp, 0L, SEEK_END);
+    flen = ftell(fp);
+    //fseek(fp, 0L, SEEK_SET);
+    rewind(fp);
+
+    return flen;
+}
+
 int main(int argc, char *argv[]) { 
     int sd; // Socket decriptor for connection to server
     size_t size_read;
     ssize_t mlen; // Message length
     uint64_t total_read = 0; // Total bytes read from file
+
 #ifdef IPV6
     struct sockaddr_in6 server, client;
 #else 
@@ -54,6 +71,7 @@ int main(int argc, char *argv[]) {
     char *ip; // Server IP address
     char *fn; // Filename to send to server
     unsigned char buf[BUFSIZE]; // Read buffer for file to send to server
+    unsigned char server_buf[BUFSIZE];
 
     // Parse arguments for server IP address and filename from user
     // Read positional arguments for ip and port from command line
@@ -99,43 +117,60 @@ int main(int argc, char *argv[]) {
     printf("Successfully connected to server! --> %d\n", sd);
 
     /// Main loop to send file to server 
-    int success = 0; // Indicates whether file transfer was successful
+    /// Get size of file and append to request to server
+    sprintf(buf, "%s,%ld", fn, get_filelen(fp));
+    printf("Message to server [%s]\n", buf);
 
     // Send request to server 
-    if (send(sd, fn, strlen(fn), 0) < 0) { 
+    if (send(sd, buf, strlen(buf), 0) < 0) { 
         printf("Unable to send request to server\n");
         exit(0);
     }
     printf("Successfully sent request to server %s:%d\n", ip, FTP_PORT);
     
-    // wait for confirmation and send filename to server
-    mlen = recv(sd, buf, sizeof(buf), 0);
-    if (mlen < 0) { 
+    // wait for ack and send filename to server
+    if ((mlen = recv(sd, buf, sizeof(buf), 0)) < 0) { 
         printf("Unable to receive message from server\n");
         exit(0);
     }
+    printf("len %ld\n", mlen);
     buf[mlen] = '\0'; // Null terminate
-    printf("Server message: [%d]%s\n", mlen, buf);
+    printf("Server message: [%ld]%s\n", mlen, buf);
     
-    if (strcmp(buf, GO) != 0) { 
-        printf("Rejected by server!\n");
+    if (strcmp(buf, ACK) != 0) { 
+        printf("Didn't receive filename ack!\n");
         close(sd);
         exit(0);
     }
-    memset(buf, 0, BUFSIZE); // Clean buffer
-
+    WIPE(buf); // Clean buffer
+    
+    size_t nrecv; // Number of bytes the server received
+    char* end_ptr;
     // Begin sending file data
     while((size_read = fread(&buf, 1, BUFSIZE, fp)) > 0) {    
-        //printf("Sent [%d]%s\n", (int)size_read, (char*)buf);
-        if (send(sd, buf, size_read, 0) != size_read) { 
-            printf("Error reading file!\n");
+        while(1) {
+            // Send data to server
+            if (send(sd, buf, size_read, 0) != size_read) { 
+                printf("Error sending data file!\n");
+                break;
+            }
+            printf("Sent [%d]%s\n", (int)size_read, (char*)buf);
+
+            // get ack from server
+            mlen = read(sd, server_buf, BUFSIZE);
+
+            // If we get a retry, try to resend buffer
+            if (strcmp(server_buf, RETRY) != 0) { 
+                printf("Got retry\n");
+                break;
+            }
             break;
         }
-        total_read += size_read;
+
         //memset(buf, '\0', BUFSIZE); // Clean buffer
     }
     fclose(fp);
-    printf("Done sending file: %d bytes sent\n", total_read);
+    printf("Done sending file: %ld bytes sent\n", total_read);
     //send(sd, CLIENT_DONE, strlen(CLIENT_DONE), 0); // Indicate to server we are done
 
     memset(buf, 0, BUFSIZE); // Clean buffer
