@@ -55,7 +55,6 @@ void serve_client(int client_sd) {
         return;
     }
     // Retrieve filename, filelength
-    printf("Message --> [%ld]%s\n", mlen, client_buf);    
     temp = strtok(client_buf, ","); // Get filename
     strcpy(outfile, temp);
 
@@ -90,13 +89,11 @@ void serve_client(int client_sd) {
     }
 
     // Otherwise accept, and listen for message
-    printf("strlen %ld\n", strlen(ACK));
     if (send(client_sd, ACK, strlen(ACK), 0) < 0) { 
         printf("Unable to send init to client\n");
         return;
     }
 
-    printf("file %s\n", outfile);
     // Init out file to write data to 
     FILE *outfp = fopen(outfile, "wb");
 
@@ -106,8 +103,6 @@ void serve_client(int client_sd) {
     }
 
     size_t nsent = 0; // bytes client intended to send
-
-    printf("Begin listening for data\n");
     while ((mlen = read(client_sd, client_buf, BUFSIZE)) > 0) {
         
         // Check if we received the right length
@@ -123,6 +118,10 @@ void serve_client(int client_sd) {
                 printf("Unable to send ack to client\n");
                 break;
             }
+
+            if (total_read % 98024 == 0) { 
+                printf("Received %ld from %s\n", mlen, outfile);
+            }
         }
         
         // Write out to file on valid receive
@@ -133,11 +132,10 @@ void serve_client(int client_sd) {
         total_read += mlen;
         flen -= mlen;
 
-        printf("[%ld] Left %ld\n", mlen, flen);
+        //printf("[%ld] Left %ld\n", mlen, flen);
         if (flen <= 0) { break; }
     }
     fclose(outfp);
-    printf("didnt receive %ld\n", flen);
 
     // Confirm receiving the file from the client
     printf("Successfully received %ld bytes from %s\n", total_read, outfile);
@@ -202,6 +200,7 @@ int main(int argc, char *argv[]) {
     }
     int client_len = sizeof(client);
 
+    pid_t child; 
     while(1) { // Main listen and server loop
         printf("Listening for clients...\n");
 
@@ -213,16 +212,20 @@ int main(int argc, char *argv[]) {
             printf("Failed client request:: %d\n", client_sd);
             continue;
         }
-    #ifdef IPV6 
-        inet_ntop(AF_INET6, &(client.sin6_addr), addr6_str, sizeof(addr6_str));
-        printf("Serving %s:%i\n", addr6_str, ntohs(client.sin6_port));
-    #else 
-        printf("Serving %s:%i\n", inet_ntoa(client.sin_addr), ntohs(client.sin_port));
-    #endif
-        // Server client 
-        serve_client(client_sd);
-        close(client_sd); // close connection with served client 
-        // repeat
+
+        if ((child = fork()) == 0) { 
+            close(sd); // Close listening socket for child 
+#ifdef IPV6 
+            inet_ntop(AF_INET6, &(client.sin6_addr), addr6_str, sizeof(addr6_str));
+            printf("Serving %s:%i\n", addr6_str, ntohs(client.sin6_port));
+#else 
+            printf("Serving %s:%i\n", inet_ntoa(client.sin_addr), ntohs(client.sin_port));
+#endif
+            // Server client 
+            serve_client(client_sd);
+            exit(0);
+        }
+        close(client_sd); // parent closes connection with served client 
     }
 
     close(sd); // Close server sd
