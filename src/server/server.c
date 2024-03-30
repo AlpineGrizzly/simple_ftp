@@ -36,7 +36,7 @@
 #define WIPE(x) (memset(x, '\0', sizeof(x)))
 
 // Function for serving client that is connected
-void serve_client(int client_sd) { 
+void serve_client(char* client_id, int client_sd) { 
     size_t mlen;
     uint64_t total_read = 0; // bytes read
     char* temp; // Used to get tokens from client request
@@ -46,7 +46,7 @@ void serve_client(int client_sd) {
     unsigned char client_buf[BUFSIZE] = {0}; // +1 for null terminator
     unsigned char server_buf[BUFSIZE] = {0}; 
 
-    printf("Serving %d\n", client_sd);
+    printf("Serving %s\n", client_id);
 
     // Receive filename from client
     mlen = recv(client_sd, client_buf, sizeof(client_buf), 0);
@@ -120,7 +120,7 @@ void serve_client(int client_sd) {
             }
 
             if (total_read % 98024 == 0) { 
-                printf("Received %ld from %s\n", mlen, outfile);
+                printf("Received %ld from %s\n", mlen, client_id);
             }
         }
         
@@ -222,7 +222,7 @@ int main(int argc, char *argv[]) {
             printf("Serving %s:%i\n", inet_ntoa(client.sin_addr), ntohs(client.sin_port));
 #endif
             // Server client 
-            serve_client(client_sd);
+            serve_client(addr6_str, client_sd);
             exit(0);
         }
         close(client_sd); // parent closes connection with served client 
