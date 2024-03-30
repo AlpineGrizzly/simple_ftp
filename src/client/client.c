@@ -154,14 +154,14 @@ int main(int argc, char *argv[]) {
                 printf("Error sending data file!\n");
                 break;
             }
-            printf("Sent [%d]%s\n", (int)size_read, (char*)buf);
+            //printf("Sent [%d]%s\n", (int)size_read, (char*)buf);
 
             // get ack from server
             mlen = read(sd, server_buf, BUFSIZE);
 
             // If we get a retry, try to resend buffer
             if (strcmp(server_buf, RETRY) != 0) { 
-                printf("Got retry\n");
+                //printf("Got retry\n");
                 break;
             }
             break;
